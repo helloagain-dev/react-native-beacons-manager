@@ -4,7 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.RemoteException;
-import android.support.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
 import android.util.Log;
 
 import com.facebook.react.bridge.Callback;
@@ -47,14 +47,18 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
     super(reactContext);
     Log.d(LOG_TAG, "BeaconsAndroidModule - started");
     this.mReactContext = reactContext;
-    this.mApplicationContext = reactContext.getApplicationContext();
-    this.mBeaconManager = BeaconManager.getInstanceForApplication(mApplicationContext);
-    // need to bind at instantiation so that service loads (to test more)
-    mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:0-3=4c000215,i:4-19,i:20-21,i:22-23,p:24-24"));
-    bindManager();
   }
 
-  @Override
+    @Override
+    public void initialize() {
+        this.mApplicationContext = this.mReactContext.getApplicationContext();
+        this.mBeaconManager = BeaconManager.getInstanceForApplication(mApplicationContext);
+        // need to bind at instantiation so that service loads (to test more)
+        mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:0-3=4c000215,i:4-19,i:20-21,i:22-23,p:24-24"));
+        bindManager();
+    }
+
+    @Override
   public String getName() {
       return LOG_TAG;
   }
@@ -286,7 +290,20 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 
       @Override
       public void didDetermineStateForRegion(int i, Region region) {
-
+          String state = "unknown";
+          switch (i) {
+              case MonitorNotifier.INSIDE:
+                  state = "inside";
+                  break;
+              case MonitorNotifier.OUTSIDE:
+                  state = "outside";
+                  break;
+              default:
+                  break;
+          }
+          WritableMap map = createMonitoringResponse(region);
+          map.putString("state", state);
+          sendEvent(mReactContext, "didDetermineState", map);
       }
   };
 
@@ -357,8 +374,16 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
               b.putInt("minor", beacon.getId3().toInt());
           }
           b.putInt("rssi", beacon.getRssi());
-          b.putDouble("distance", beacon.getDistance());
-          b.putString("proximity", getProximity(beacon.getDistance()));
+          if(beacon.getDistance() == Double.POSITIVE_INFINITY
+                    || Double.isNaN(beacon.getDistance())
+                    || beacon.getDistance() == Double.NaN
+                    || beacon.getDistance() == Double.NEGATIVE_INFINITY){
+                b.putDouble("distance", 999.0);
+                b.putString("proximity", "far");
+            }else {
+                b.putDouble("distance", beacon.getDistance());
+                b.putString("proximity", getProximity(beacon.getDistance()));
+            }
           a.pushMap(b);
       }
       map.putArray("beacons", a);
@@ -389,6 +414,17 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
       }
   }
 
+  @ReactMethod
+  public void requestStateForRegion(String regionId, String beaconUuid, int minor, int major) {
+      Region region = createRegion(
+        regionId,
+        beaconUuid,
+        String.valueOf(minor).equals("-1") ? "" : String.valueOf(minor),
+        String.valueOf(major).equals("-1") ? "" : String.valueOf(major)
+      );
+      mBeaconManager.requestStateForRegion(region);
+  }
+
 
   /***********************************************************************************************
    * Utils
@@ -396,8 +432,8 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
   private void sendEvent(ReactContext reactContext, String eventName, @Nullable WritableMap params) {
       if (reactContext.hasActiveCatalystInstance()) {
         reactContext
-            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-            .emit(eventName, params);
+          .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+          .emit(eventName, params);
       }
   }
 

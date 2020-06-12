@@ -236,6 +236,13 @@ RCT_EXPORT_METHOD(stopRangingBeaconsInRegion:(NSDictionary *) dict)
   }
 }
 
+RCT_EXPORT_METHOD(requestStateForRegion:(NSDictionary *)dict)
+{
+  if ([self.locationManager respondsToSelector:@selector(requestStateForRegion:)]) {
+    [self.locationManager requestStateForRegion:[self convertDictToBeaconRegion:dict]];
+  }
+}
+
 RCT_EXPORT_METHOD(startUpdatingLocation)
 {
   [self.locationManager startUpdatingLocation];
@@ -343,6 +350,11 @@ RCT_EXPORT_METHOD(shouldDropEmptyRanges:(BOOL)drop)
 
 -(void)locationManager:(CLLocationManager *)manager
         didEnterRegion:(CLBeaconRegion *)region {
+
+  if (! [region respondsToSelector:@selector(proximityUUID)]) {
+    return;
+  }
+
   NSDictionary *event = [self convertBeaconRegionToDict: region];
 
   [self sendEventWithName:@"regionDidEnter" body:event];
@@ -350,6 +362,11 @@ RCT_EXPORT_METHOD(shouldDropEmptyRanges:(BOOL)drop)
 
 -(void)locationManager:(CLLocationManager *)manager
          didExitRegion:(CLBeaconRegion *)region {
+
+  if (! [region respondsToSelector:@selector(proximityUUID)]) {
+    return;
+  }
+
   NSDictionary *event = [self convertBeaconRegionToDict: region];
 
   [self sendEventWithName:@"regionDidExit" body:event];
